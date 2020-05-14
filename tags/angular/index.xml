@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>angular on Hjhee Blog</title>
+    <link>https://hjhee.github.io/tags/angular/</link>
+    <description>Recent content in angular on Hjhee Blog</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-cn</language>
+    <lastBuildDate>Fri, 02 Mar 2018 10:35:38 +0100</lastBuildDate>
+    
+	<atom:link href="https://hjhee.github.io/tags/angular/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Angular开发环境配置指南</title>
+      <link>https://hjhee.github.io/posts/angular-intro/</link>
+      <pubDate>Fri, 02 Mar 2018 10:35:38 +0100</pubDate>
+      
+      <guid>https://hjhee.github.io/posts/angular-intro/</guid>
+      <description>&lt;p&gt;本文介绍了如何从Github上下载代码、在本机搭建Angular开发环境以及浏览本机由该Angular编写的网站。&lt;/p&gt;</description>
+    </item>
+    
+  </channel>
+</rss>

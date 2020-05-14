@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Angular开发环境配置指南 | Hjhee Blog</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/fonts.css" />
+    
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-rc.1/dist/katex.min.css" integrity="sha384-D+9gmBxUQogRLqvARvNLmA9hS2x//eK1FhVb9PiU86gmcrBrJAQT8okdJ4LMp2uv" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.10.0-rc.1/dist/katex.min.js" integrity="sha384-483A6DwYfKeDa0Q52fJmxFXkcPCFfnXMoXblOkJ4JcA8zATN6Tm78UNL72AKk+0O" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.10.0-rc.1/dist/contrib/auto-render.min.js" integrity="sha384-yACMu8JWxKzSp/C1YV86pzGiQ/l1YUfE8oPuahJQxzehAjEt2GiQuy/BIvl9KyeF" crossorigin="anonymous"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body);
+        });
+    </script>
+
+<header>
+
+  
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css">
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+  <nav>
+    <ul>
+      
+      
+      <li class="pull-left ">
+        <a href="https://hjhee.github.io/">/home/hjhee blog</a>
+      </li>
+      
+      
+      <li class="pull-left ">
+        <a href="/tags/">~/tags</a>
+      </li>
+      
+
+      
+      
+      <li class="pull-right">
+        <a href="/index.xml">~/rss</a>
+      </li>
+      
+
+    </ul>
+  </nav>
+</header>
+
+  </head>
+
+  <body>
+    <br/>
+
+<div class="article-meta">
+<h1><span class="title">Angular开发环境配置指南</span></h1>
+
+<h2 class="date">2018/03/02</h2>
+<p class="terms">
+  
+  
+  
+  
+  Tags: <a href="/tags/angular">angular</a> 
+  
+  
+</p>
+</div>
+
+
+
+<main>
+<p>本文介绍了如何从Github上下载代码、在本机搭建Angular开发环境以及浏览本机由该Angular编写的网站。</p>
+<h1 id="angular介绍">Angular介绍</h1>
+<p>Angular是一个前端框架，由Node.js驱动，用于网页开发人员编写网站界面。利用Angular编写的网页可以将数据和界面分离，由此解耦了前端开发和后端开发。Angular提供了数据绑定功能，给HTML网页编写动态页面提供了更多便利。</p>
+<p>关于Angular可参考如下文章：</p>
+<ul>
+<li><a href="https://yalishizhude.github.io/2015/09/10/angular-introduction/">Angular开发者指南(1) &ndash; Angular介绍</a></li>
+<li><a href="https://cloud.tencent.com/developer/article/1004715">前端开发框架简介：angular 和 react</a></li>
+</ul>
+<h1 id="开发环境搭建">开发环境搭建</h1>
+<p>下面介绍如何获取最新的项目代码并安装必要的开发工具以生成网页。项目前端代码托管于<a href="https://github.com/hjhee/gas_fEnd">gas_fEnd</a>，项目后端代码托管于<a href="https://github.com/hjhee/gas_bEnd">gas_bEnd</a>。</p>
+<h2 id="本地网站构建流程">本地网站构建流程</h2>
+<ol>
+<li>安装开发工具</li>
+<li>获取代码</li>
+<li>生成网页</li>
+<li>更新项目代码</li>
+</ol>
+<h2 id="安装开发工具">安装开发工具</h2>
+<p>Angular项目代码通过Git管理，为了方便跟进项目，有必要安装Git客户端获取并更新项目代码。为了部署方便，本文利用<a href="https://chocolatey.org/">chocolatey</a>管理所有与之相关的软件。</p>
+<p>安装chocolatey：利用管理员权限打开cmd窗口，并在cmd下执行下面的代码。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-batch" data-lang="batch">@<span style="color:#e6db74">&#34;</span>%SystemRoot%<span style="color:#e6db74">\System32\WindowsPowerShell\v1.0\powershell.exe&#34;</span> -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command <span style="color:#e6db74">&#34;iex ((New-Object System.Net.WebClient).DownloadString(&#39;https://chocolatey.org/install.ps1&#39;))&#34;</span> &amp;&amp; <span style="color:#66d9ef">SET</span> <span style="color:#e6db74">&#34;PATH=</span>%PATH%<span style="color:#e6db74">;</span>%ALLUSERSPROFILE%<span style="color:#e6db74">\chocolatey\bin&#34;</span>
+</code></pre></div><p>安装git：在上一步打开的cmd窗口内执行下面的代码。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-batch" data-lang="batch">choco install -y git.install
+</code></pre></div><p>安装Node.js：Angular项目由Node.js管理，需要安装npm以获取需要的依赖包。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-batch" data-lang="batch">choco install -y nodejs-lts
+npm install -g cnpm --registry=https://registry.npm.taobao.org
+</code></pre></div><p>安装Angular CLI：通过npm安装Angular CLI以执行Angular代码</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-batch" data-lang="batch">cnpm install -g @angular/cli
+</code></pre></div><p>关于chocolatey可参考如下文章：</p>
+<ul>
+<li><a href="https://www.jianshu.com/p/abaa0e8c261f">Windows下的包管理器 Chocolatey 的使用</a></li>
+<li><a href="https://www.jianshu.com/p/831aa4a280e7">Windows下的包管理器Chocolatey</a></li>
+</ul>
+<p>关于git可参考如下文章：</p>
+<ul>
+<li><a href="https://www.liaoxuefeng.com/wiki/0013739516305929606dd18361248578c67b8067c8c017b000/001373962845513aefd77a99f4145f0a2c7a7ca057e7570000">Git简介</a></li>
+<li><a href="http://blog.csdn.net/tronteng/article/details/7202577">Git详解之一 Git介绍</a></li>
+</ul>
+<p>关于Node.js可参考如下文章：</p>
+<ul>
+<li><a href="https://www.ibm.com/developerworks/cn/opensource/os-nodejs/">Node.js 究竟是什么？</a></li>
+<li><a href="http://www.infoq.com/cn/articles/what-is-nodejs">深入浅出Node.js（一）：什么是Node.js</a></li>
+</ul>
+<h2 id="获取代码">获取代码</h2>
+<p>在第一次获取代码的时候，需要通过git客户端获取，以<code>D:\dev\web\gas</code>为例说明步骤：</p>
+<p>确保目录<code>D:\dev\web</code>存在，若不存在应首先建立好相关目录。git将Angular代码保存到<code>D:\dev\web\gas</code>目录，该目录不需要事先创建，若已存在须该目录内不包含任何文件（隐藏文件以及非隐藏文件）。</p>
+<p>打开一个cmd窗口，并执行如下代码，注意从这里开始都不需要管理员权限。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-batch" data-lang="batch"><span style="color:#66d9ef">cd</span> /d D:\dev\web
+git clone https://github.com/hjhee/gas_fEnd.git gas
+<span style="color:#66d9ef">cd</span> /d D:\dev\web\gas
+cnpm install
+</code></pre></div><h1 id="生成网页">生成网页</h1>
+<p>Angular项目通过Typescript描述网页，需要运行本地服务器渲染HTML模板，以渲染本地/网络数据至模板并显示。打开cmd窗口并运行如下代码，注意在访问本地网页的期间不能关闭该cmd窗口。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-batch" data-lang="batch"><span style="color:#66d9ef">cd</span> /d D:\dev\web\gas
+ng serve
+</code></pre></div><p>现在可以通过浏览器访问<a href="http://localhost:4200/">http://localhost:4200/</a>以查看Angular生成的网页。</p>
+<p>关于Typescript可参考如下文章：</p>
+<ul>
+<li><a href="https://juejin.im/entry/599154035188257da64bef9d">一篇缺失的 TypeScript 介绍</a></li>
+</ul>
+<h1 id="维护项目">维护项目</h1>
+<p>在项目开发过程中，代码交由GitHub.com托管。利用以下命令从<a href="https://github.com/hjhee/gas_fEnd">gas_fEnd</a>获取最新的代码至本地：</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-batch" data-lang="batch"><span style="color:#66d9ef">cd</span> /d D:\dev\web\gas
+git fetch origin master
+git reset --hard FETCH_HEAD
+git clean -df
+</code></pre></div><p>关于GitHub.com可参考如下文章：</p>
+<ul>
+<li><a href="http://blog.csdn.net/qq_35246620/article/details/66980283">初识 GitHub · 简介篇</a></li>
+</ul>
+</main>
+
+    <footer>
+      
+<script>
+(function() {
+  function center_el(tagName) {
+    var tags = document.getElementsByTagName(tagName), i, tag;
+    for (i = 0; i < tags.length; i++) {
+      tag = tags[i];
+      var parent = tag.parentElement;
+      
+      if (parent.childNodes.length === 1) {
+        
+        if (parent.nodeName === 'A') {
+          parent = parent.parentElement;
+          if (parent.childNodes.length != 1) continue;
+        }
+        if (parent.nodeName === 'P') parent.style.textAlign = 'center';
+      }
+    }
+  }
+  var tagNames = ['img', 'embed', 'object'];
+  for (var i = 0; i < tagNames.length; i++) {
+    center_el(tagNames[i]);
+  }
+})();
+</script>
+
+      
+    </footer>
+  </body>
+</html>
+

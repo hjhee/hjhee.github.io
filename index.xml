@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Home on Hjhee Blog</title>
+    <link>https://hjhee.github.io/</link>
+    <description>Recent content in Home on Hjhee Blog</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-cn</language>
+    <lastBuildDate>Fri, 25 Oct 2019 18:07:36 +0200</lastBuildDate>
+    
+	<atom:link href="https://hjhee.github.io/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Ros Bridge Und Python 3</title>
+      <link>https://hjhee.github.io/posts/ros-bridge-und-python-3/</link>
+      <pubDate>Fri, 25 Oct 2019 18:07:36 +0200</pubDate>
+      
+      <guid>https://hjhee.github.io/posts/ros-bridge-und-python-3/</guid>
+      <description>Nachdem ROS (melodic) und CARLA installiert werden, soll rosbridge für CARLA eingerichtet werden. Über carla_ros_bridge kann CARLA Simulator mit ROS Nodes kommunizieren.
+Zuerst wird Quellcode heruntergeladen und in catkin Workspace kompiliert. Dann wird das Problem bei Ausführung in Python 3 Umgebung diskutiert.
+Setup Vorbereitung: Variablen definieren, Ordner erstellen, Quellcode herunterladen. Hier bezeichnet man den Pfad zu catkin Workspace mit der Variable CATKIN_WORKSPACE, Quellcode werden im Ordner $ROS_PYTHON3_CODE verlegt. Um die Benutzerumgebung von der Systemumgebung zu trennen, verwendet man hier eine neue Python Umgebung: $PYTHON3_VIRTUALENV.</description>
+    </item>
+    
+    <item>
+      <title>Angular开发环境配置指南</title>
+      <link>https://hjhee.github.io/posts/angular-intro/</link>
+      <pubDate>Fri, 02 Mar 2018 10:35:38 +0100</pubDate>
+      
+      <guid>https://hjhee.github.io/posts/angular-intro/</guid>
+      <description>&lt;p&gt;本文介绍了如何从Github上下载代码、在本机搭建Angular开发环境以及浏览本机由该Angular编写的网站。&lt;/p&gt;</description>
+    </item>
+    
+    <item>
+      <title>Remote Monitor Platform Development</title>
+      <link>https://hjhee.github.io/posts/remote-platform/</link>
+      <pubDate>Wed, 29 Jun 2016 01:25:20 +0000</pubDate>
+      
+      <guid>https://hjhee.github.io/posts/remote-platform/</guid>
+      <description>&lt;h1 id=&#34;运行环境&#34;&gt;运行环境&lt;/h1&gt;
+&lt;p&gt;程序运行在阿里云云主机上，跑Gentoo Linux系统。服务器架构如论文和PPT描述。
+服务器开放UDP端口5683与设备通信，目前采用自定义协议，以后可以尝试CoAP协议，但目前的GPRS模块通信质量比较差，使用CoAP协议需要考虑。
+80端口开放http服务，用nginx反向代理，url结构如nginx配置文件所示。&lt;/p&gt;</description>
+    </item>
+    
+    <item>
+      <title>Introduction to Qt Quick Development</title>
+      <link>https://hjhee.github.io/posts/qt-quick/</link>
+      <pubDate>Tue, 28 Jun 2016 13:57:47 +0800</pubDate>
+      
+      <guid>https://hjhee.github.io/posts/qt-quick/</guid>
+      <description>&lt;p&gt;简易开发文档&lt;/p&gt;</description>
+    </item>
+    
+  </channel>
+</rss>

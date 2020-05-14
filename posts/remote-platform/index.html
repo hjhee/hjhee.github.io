@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Remote Monitor Platform Development | Hjhee Blog</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/fonts.css" />
+    
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-rc.1/dist/katex.min.css" integrity="sha384-D+9gmBxUQogRLqvARvNLmA9hS2x//eK1FhVb9PiU86gmcrBrJAQT8okdJ4LMp2uv" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.10.0-rc.1/dist/katex.min.js" integrity="sha384-483A6DwYfKeDa0Q52fJmxFXkcPCFfnXMoXblOkJ4JcA8zATN6Tm78UNL72AKk+0O" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.10.0-rc.1/dist/contrib/auto-render.min.js" integrity="sha384-yACMu8JWxKzSp/C1YV86pzGiQ/l1YUfE8oPuahJQxzehAjEt2GiQuy/BIvl9KyeF" crossorigin="anonymous"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body);
+        });
+    </script>
+
+<header>
+
+  
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css">
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+  <nav>
+    <ul>
+      
+      
+      <li class="pull-left ">
+        <a href="https://hjhee.github.io/">/home/hjhee blog</a>
+      </li>
+      
+      
+      <li class="pull-left ">
+        <a href="/tags/">~/tags</a>
+      </li>
+      
+
+      
+      
+      <li class="pull-right">
+        <a href="/index.xml">~/rss</a>
+      </li>
+      
+
+    </ul>
+  </nav>
+</header>
+
+  </head>
+
+  <body>
+    <br/>
+
+<div class="article-meta">
+<h1><span class="title">Remote Monitor Platform Development</span></h1>
+
+<h2 class="date">2016/06/29</h2>
+<p class="terms">
+  
+  
+  
+  
+  Tags: <a href="/tags/go">Go</a> 
+  
+  
+</p>
+</div>
+
+
+
+<main>
+<h1 id="运行环境">运行环境</h1>
+<p>程序运行在阿里云云主机上，跑Gentoo Linux系统。服务器架构如论文和PPT描述。
+服务器开放UDP端口5683与设备通信，目前采用自定义协议，以后可以尝试CoAP协议，但目前的GPRS模块通信质量比较差，使用CoAP协议需要考虑。
+80端口开放http服务，用nginx反向代理，url结构如nginx配置文件所示。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-nginx" data-lang="nginx"><span style="color:#66d9ef">server</span> {
+    <span style="color:#f92672">listen</span> <span style="color:#ae81ff">80</span>;
+    <span style="color:#75715e">#listen 127.0.0.1;
+</span><span style="color:#75715e"></span>    <span style="color:#f92672">server_name</span> <span style="color:#e6db74">localhost</span>;
+
+    <span style="color:#f92672">access_log</span> <span style="color:#e6db74">/var/log/nginx/localhost.access_log</span> <span style="color:#e6db74">main</span>;
+    <span style="color:#f92672">error_log</span> <span style="color:#e6db74">/var/log/nginx/localhost.error_log</span> <span style="color:#e6db74">info</span>;
+
+    <span style="color:#f92672">root</span> <span style="color:#e6db74">/var/www/localhost/htdocs</span>;
+
+    <span style="color:#f92672">location</span> <span style="color:#e6db74">/api</span> {
+        <span style="color:#f92672">proxy_pass</span> <span style="color:#e6db74">http://localhost:8080</span>;
+    }
+
+    <span style="color:#f92672">location</span> <span style="color:#e6db74">/api/events</span> {
+        <span style="color:#f92672">proxy_pass</span> <span style="color:#e6db74">http://localhost:9952</span>;
+        <span style="color:#f92672">proxy_set_header</span> <span style="color:#e6db74">Connection</span> <span style="color:#e6db74">&#39;&#39;</span>;
+        <span style="color:#f92672">proxy_http_version</span> <span style="color:#ae81ff">1</span><span style="color:#e6db74">.1</span>;
+        <span style="color:#f92672">chunked_transfer_encoding</span> <span style="color:#66d9ef">off</span>;
+        <span style="color:#f92672">proxy_buffering</span> <span style="color:#66d9ef">off</span>;
+        <span style="color:#f92672">proxy_cache</span> <span style="color:#66d9ef">off</span>;
+    }
+
+    <span style="color:#f92672">location</span> <span style="color:#e6db74">/node</span> {
+        <span style="color:#f92672">proxy_pass</span> <span style="color:#e6db74">http://localhost:10242</span>;
+    }
+
+    <span style="color:#f92672">location</span> <span style="color:#e6db74">/api/status</span> {
+        <span style="color:#f92672">proxy_pass</span> <span style="color:#e6db74">http://localhost:10242</span>;
+    }
+}
+</code></pre></div><p>sse-server.go编写了Sever-Sent Event的实现，通过/tmp/gasdata.sock从udp-server.go获取气体数据，nginx将/api/events路由给sse-server.go。</p>
+<p>udp-server.go负责设备通信，它和其他服务器通过Unix Socket交换数据。</p>
+<p>templateServer.go负责生成HTML模板。</p>
+<p>上述服务器都通过go语言实现</p>
+<h1 id="sse-server">sse-server</h1>
+<p>go语言的sse实现，很大程度参考了网上的例子<a href="https://www.new-bamboo.co.uk/blog/2014/05/13/writing-a-server-sent-events-server-in-go/">Writing a Server Sent Events server in Go</a>。</p>
+<p>Broker维护了客户端列表，数据都通过chan广播给客户端。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#75715e">// This happens in a goroutine somewhere else.
+</span><span style="color:#75715e"></span><span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">Notifier</span> <span style="color:#f92672">&lt;-</span> <span style="color:#a6e22e">eventBytes</span>
+</code></pre></div><p>Device结构定义了发送给浏览器的json数据格式，Data []float64是气体浓度数组。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">main</span>
+
+<span style="color:#f92672">import</span> (
+    <span style="color:#e6db74">&#34;time&#34;</span>
+    <span style="color:#e6db74">&#34;net/http&#34;</span>
+    <span style="color:#e6db74">&#34;net&#34;</span>
+
+    <span style="color:#e6db74">&#34;github.com/justinas/alice&#34;</span>
+    <span style="color:#e6db74">&#34;os&#34;</span>
+    <span style="color:#e6db74">&#34;fmt&#34;</span>
+
+    <span style="color:#e6db74">&#34;github.com/op/go-logging&#34;</span>
+    <span style="color:#e6db74">&#34;encoding/binary&#34;</span>
+    <span style="color:#e6db74">&#34;encoding/json&#34;</span>
+    <span style="color:#e6db74">&#34;math&#34;</span>
+)
+
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">log</span> = <span style="color:#a6e22e">logging</span>.<span style="color:#a6e22e">MustGetLogger</span>(<span style="color:#e6db74">&#34;sselog&#34;</span>)
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">logFormat</span> = <span style="color:#a6e22e">logging</span>.<span style="color:#a6e22e">MustStringFormatter</span>(
+    <span style="color:#e6db74">`%{color}%{time:15:04:05.000} %{shortfunc} | %{level:.4s} %{id:03x}%{color:reset} %{message}`</span>,
+)
+
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">bchan</span> = make(<span style="color:#66d9ef">chan</span> <span style="color:#a6e22e">Device</span>, <span style="color:#ae81ff">20</span>)
+
+<span style="color:#66d9ef">type</span> <span style="color:#a6e22e">Device</span> <span style="color:#66d9ef">struct</span> {
+    <span style="color:#a6e22e">Id</span> <span style="color:#66d9ef">int</span> <span style="color:#e6db74">`json:&#34;id&#34;`</span>
+    <span style="color:#a6e22e">Data</span> []<span style="color:#66d9ef">float64</span> <span style="color:#e6db74">`json:&#34;data&#34;`</span>
+}
+
+<span style="color:#75715e">// A MessageChan is a channel of channels
+</span><span style="color:#75715e">// Each connection sends a channel of bytes to a global MessageChan
+</span><span style="color:#75715e">// The main broker listen() loop listens on new connections on MessageChan
+</span><span style="color:#75715e">// New event messages are broadcast to all registered connection channels
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">MessageChan</span> <span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>
+
+<span style="color:#75715e">// A Broker holds open client connections,
+</span><span style="color:#75715e">// listens for incoming events on its Notifier channel
+</span><span style="color:#75715e">// and broadcast event data to all registered connections
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">Broker</span> <span style="color:#66d9ef">struct</span> {
+
+    <span style="color:#75715e">// Events are pushed to this channel by the main events-gathering routine
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">Notifier</span> <span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>
+
+    <span style="color:#75715e">// New client connections
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">newClients</span> <span style="color:#66d9ef">chan</span> <span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>
+
+    <span style="color:#75715e">// Closed client connections
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">closingClients</span> <span style="color:#66d9ef">chan</span> <span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>
+
+    <span style="color:#75715e">// Client connections registry
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">clients</span> <span style="color:#66d9ef">map</span>[<span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>]<span style="color:#66d9ef">bool</span>
+}
+
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">broker</span> = <span style="color:#a6e22e">NewServer</span>()
+
+<span style="color:#75715e">// Broker factory
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">NewServer</span>() (<span style="color:#a6e22e">broker</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">Broker</span>) {
+  <span style="color:#75715e">// Instantiate a broker
+</span><span style="color:#75715e"></span>  <span style="color:#a6e22e">broker</span> = <span style="color:#f92672">&amp;</span><span style="color:#a6e22e">Broker</span>{
+    <span style="color:#a6e22e">Notifier</span>:       make(<span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>, <span style="color:#ae81ff">1</span>),
+    <span style="color:#a6e22e">newClients</span>:     make(<span style="color:#66d9ef">chan</span> <span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>),
+    <span style="color:#a6e22e">closingClients</span>: make(<span style="color:#66d9ef">chan</span> <span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>),
+    <span style="color:#a6e22e">clients</span>:    make(<span style="color:#66d9ef">map</span>[<span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>]<span style="color:#66d9ef">bool</span>),
+  }
+
+  <span style="color:#75715e">// Set it running - listening and broadcasting events
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">go</span> <span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">listen</span>()
+
+  <span style="color:#66d9ef">return</span>
+}
+
+<span style="color:#75715e">// Listen on different channels and act accordingly
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">broker</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">Broker</span>) <span style="color:#a6e22e">listen</span>() {
+    <span style="color:#66d9ef">for</span> {
+        <span style="color:#66d9ef">select</span> {
+        <span style="color:#66d9ef">case</span> <span style="color:#a6e22e">s</span> <span style="color:#f92672">:=</span> <span style="color:#f92672">&lt;-</span><span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">newClients</span>:
+
+            <span style="color:#75715e">// A new client has connected.
+</span><span style="color:#75715e"></span>            <span style="color:#75715e">// Register their message channel
+</span><span style="color:#75715e"></span>            <span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">clients</span>[<span style="color:#a6e22e">s</span>] = <span style="color:#66d9ef">true</span>
+            <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;Client added. %d registered clients&#34;</span>, len(<span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">clients</span>))
+        <span style="color:#66d9ef">case</span> <span style="color:#a6e22e">s</span> <span style="color:#f92672">:=</span> <span style="color:#f92672">&lt;-</span><span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">closingClients</span>:
+
+            <span style="color:#75715e">// A client has dettached and we want to
+</span><span style="color:#75715e"></span>            <span style="color:#75715e">// stop sending them messages.
+</span><span style="color:#75715e"></span>            delete(<span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">clients</span>, <span style="color:#a6e22e">s</span>)
+            <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;Removed client. %d registered clients&#34;</span>, len(<span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">clients</span>))
+        <span style="color:#66d9ef">case</span> <span style="color:#a6e22e">event</span> <span style="color:#f92672">:=</span> <span style="color:#f92672">&lt;-</span><span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">Notifier</span>:
+
+            <span style="color:#75715e">// We got a new event from the outside!
+</span><span style="color:#75715e"></span>            <span style="color:#75715e">// Send event to all connected clients
+</span><span style="color:#75715e"></span>            <span style="color:#66d9ef">for</span> <span style="color:#a6e22e">clientMessageChan</span>, <span style="color:#a6e22e">_</span> <span style="color:#f92672">:=</span> <span style="color:#66d9ef">range</span> <span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">clients</span> {
+                <span style="color:#a6e22e">clientMessageChan</span> <span style="color:#f92672">&lt;-</span> <span style="color:#a6e22e">event</span>
+            }
+        }
+    }
+
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">ByteToFloat64</span>(<span style="color:#a6e22e">b</span> []<span style="color:#66d9ef">byte</span>) <span style="color:#66d9ef">float64</span> {
+    <span style="color:#a6e22e">bits</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">binary</span>.<span style="color:#a6e22e">BigEndian</span>.<span style="color:#a6e22e">Uint64</span>(<span style="color:#a6e22e">b</span>)
+    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">math</span>.<span style="color:#a6e22e">Float64frombits</span>(<span style="color:#a6e22e">bits</span>)
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">loggingHandler</span>(<span style="color:#a6e22e">next</span> <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">Handler</span>) <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">Handler</span> {
+    <span style="color:#a6e22e">fn</span> <span style="color:#f92672">:=</span> <span style="color:#66d9ef">func</span>(<span style="color:#a6e22e">w</span> <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">ResponseWriter</span>, <span style="color:#a6e22e">r</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">Request</span>) {
+        <span style="color:#a6e22e">t1</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">time</span>.<span style="color:#a6e22e">Now</span>()
+        <span style="color:#a6e22e">next</span>.<span style="color:#a6e22e">ServeHTTP</span>(<span style="color:#a6e22e">w</span>, <span style="color:#a6e22e">r</span>)
+        <span style="color:#a6e22e">t2</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">time</span>.<span style="color:#a6e22e">Now</span>()
+        <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;[%s] %q %v\n&#34;</span>, <span style="color:#a6e22e">r</span>.<span style="color:#a6e22e">Method</span>, <span style="color:#a6e22e">r</span>.<span style="color:#a6e22e">URL</span>.<span style="color:#a6e22e">String</span>(), <span style="color:#a6e22e">t2</span>.<span style="color:#a6e22e">Sub</span>(<span style="color:#a6e22e">t1</span>))
+    }
+
+    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">HandlerFunc</span>(<span style="color:#a6e22e">fn</span>)
+}
+
+<span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">broker</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">Broker</span>) <span style="color:#a6e22e">ServeHTTP</span>(<span style="color:#a6e22e">w</span> <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">ResponseWriter</span>, <span style="color:#a6e22e">r</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">Request</span>) {
+    <span style="color:#a6e22e">flusher</span>, <span style="color:#a6e22e">ok</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">w</span>.(<span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">Flusher</span>)
+    <span style="color:#66d9ef">if</span> !<span style="color:#a6e22e">ok</span> {
+        <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">Error</span>(<span style="color:#a6e22e">w</span>, <span style="color:#e6db74">&#34;Streaming unsupported!&#34;</span>, <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">StatusInternalServerError</span>)
+        <span style="color:#66d9ef">return</span>
+    }
+    <span style="color:#a6e22e">w</span>.<span style="color:#a6e22e">Header</span>().<span style="color:#a6e22e">Set</span>(<span style="color:#e6db74">&#34;Content-Type&#34;</span>, <span style="color:#e6db74">&#34;text/event-stream&#34;</span>)
+    <span style="color:#a6e22e">w</span>.<span style="color:#a6e22e">Header</span>().<span style="color:#a6e22e">Set</span>(<span style="color:#e6db74">&#34;Cache-Control&#34;</span>, <span style="color:#e6db74">&#34;no-cache&#34;</span>)
+    <span style="color:#a6e22e">w</span>.<span style="color:#a6e22e">Header</span>().<span style="color:#a6e22e">Set</span>(<span style="color:#e6db74">&#34;Connection&#34;</span>, <span style="color:#e6db74">&#34;keep-alive&#34;</span>)
+    <span style="color:#a6e22e">w</span>.<span style="color:#a6e22e">Header</span>().<span style="color:#a6e22e">Set</span>(<span style="color:#e6db74">&#34;Access-Control-Allow-Origin&#34;</span>, <span style="color:#e6db74">&#34;*&#34;</span>)
+
+    <span style="color:#75715e">// Each connection registers its own message channel with the Broker&#39;s connections registry
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">messageChan</span> <span style="color:#f92672">:=</span> make(<span style="color:#a6e22e">MessageChan</span>)
+
+    <span style="color:#75715e">// Signal the broker that we have a new connection
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">newClients</span> <span style="color:#f92672">&lt;-</span> <span style="color:#a6e22e">messageChan</span>
+
+    <span style="color:#75715e">// Remove this client from the map of connected clients
+</span><span style="color:#75715e"></span>    <span style="color:#75715e">// when this handler exits.
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">defer</span> <span style="color:#66d9ef">func</span>() {
+        <span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">closingClients</span> <span style="color:#f92672">&lt;-</span> <span style="color:#a6e22e">messageChan</span>
+    }()
+
+    <span style="color:#75715e">// Listen to connection close and un-register messageChan
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">notify</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">w</span>.(<span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">CloseNotifier</span>).<span style="color:#a6e22e">CloseNotify</span>()
+
+    <span style="color:#66d9ef">go</span> <span style="color:#66d9ef">func</span>() {
+        <span style="color:#f92672">&lt;-</span><span style="color:#a6e22e">notify</span>
+        <span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">closingClients</span> <span style="color:#f92672">&lt;-</span> <span style="color:#a6e22e">messageChan</span>
+    }()
+
+    <span style="color:#66d9ef">for</span> {
+        <span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Fprintf</span>(<span style="color:#a6e22e">w</span>, <span style="color:#e6db74">&#34;data: %s\n\n&#34;</span>, <span style="color:#f92672">&lt;-</span><span style="color:#a6e22e">messageChan</span>)
+        <span style="color:#a6e22e">flusher</span>.<span style="color:#a6e22e">Flush</span>()
+    }
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">socketHandler</span>() {
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">socket</span> = <span style="color:#e6db74">&#34;/tmp/gasdata.sock&#34;</span>
+    <span style="color:#a6e22e">os</span>.<span style="color:#a6e22e">Remove</span>(<span style="color:#a6e22e">socket</span>)
+    <span style="color:#a6e22e">conn</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">ListenPacket</span>(<span style="color:#e6db74">&#34;unixgram&#34;</span>, <span style="color:#a6e22e">socket</span>)
+    <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+        <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Fatalf</span>(<span style="color:#e6db74">&#34;unix socket listen failed: %s\n&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">Error</span>())
+    }
+    <span style="color:#66d9ef">defer</span> <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">Close</span>()
+    <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;conn address: %s\n&#34;</span>, <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">LocalAddr</span>())
+
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">buff</span> = make([]<span style="color:#66d9ef">byte</span>, <span style="color:#ae81ff">512</span>)
+    <span style="color:#66d9ef">for</span> {
+        <span style="color:#a6e22e">_</span>, <span style="color:#a6e22e">_</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">ReadFrom</span>(<span style="color:#a6e22e">buff</span>)
+        <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+            <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Warningf</span>(<span style="color:#e6db74">&#34;unix socket read failed: %s\n&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">Error</span>())
+            <span style="color:#66d9ef">continue</span>
+        }
+        <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">dev</span> <span style="color:#a6e22e">Device</span>
+        <span style="color:#a6e22e">dev</span>.<span style="color:#a6e22e">Id</span> = int(<span style="color:#a6e22e">buff</span>[<span style="color:#ae81ff">0</span>])
+        <span style="color:#a6e22e">dev</span>.<span style="color:#a6e22e">Data</span> = make([]<span style="color:#66d9ef">float64</span>, <span style="color:#ae81ff">7</span>)
+        <span style="color:#66d9ef">for</span> <span style="color:#a6e22e">i</span><span style="color:#f92672">:=</span><span style="color:#ae81ff">0</span>; <span style="color:#a6e22e">i</span>&lt;<span style="color:#ae81ff">7</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">++</span> {
+            <span style="color:#a6e22e">dev</span>.<span style="color:#a6e22e">Data</span>[<span style="color:#a6e22e">i</span>] = <span style="color:#a6e22e">ByteToFloat64</span>(<span style="color:#a6e22e">buff</span>[<span style="color:#ae81ff">1</span><span style="color:#f92672">+</span><span style="color:#ae81ff">4</span><span style="color:#f92672">+</span><span style="color:#ae81ff">8</span><span style="color:#f92672">*</span><span style="color:#a6e22e">i</span>:])
+        }
+        <span style="color:#75715e">//log.Info(&#34;new data: %+v\n&#34;, dev)
+</span><span style="color:#75715e"></span>        <span style="color:#a6e22e">jstr</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">json</span>.<span style="color:#a6e22e">Marshal</span>(<span style="color:#a6e22e">dev</span>)
+        <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+            <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Warningf</span>(<span style="color:#e6db74">&#34;json marshal failed: %s\n&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">Error</span>())
+            <span style="color:#66d9ef">continue</span>
+        }
+        <span style="color:#a6e22e">broker</span>.<span style="color:#a6e22e">Notifier</span> <span style="color:#f92672">&lt;-</span> <span style="color:#a6e22e">jstr</span>
+    }
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {
+    <span style="color:#a6e22e">logging</span>.<span style="color:#a6e22e">SetFormatter</span>(<span style="color:#a6e22e">logFormat</span>)
+
+    <span style="color:#66d9ef">go</span> <span style="color:#a6e22e">socketHandler</span>()
+
+    <span style="color:#a6e22e">commonHandlers</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">alice</span>.<span style="color:#a6e22e">New</span>(<span style="color:#a6e22e">loggingHandler</span>)
+    <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">Handle</span>(<span style="color:#e6db74">&#34;/api/events/data.get&#34;</span>, <span style="color:#a6e22e">commonHandlers</span>.<span style="color:#a6e22e">Then</span>(<span style="color:#a6e22e">broker</span>))
+    <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">ListenAndServe</span>(<span style="color:#e6db74">&#34;localhost:9952&#34;</span>, <span style="color:#66d9ef">nil</span>)
+}
+</code></pre></div><h1 id="udp-server">udp-server</h1>
+<p>handleClient获取新的数据包，根据帧头分包，交给payloadHandler处理。payloadHandler根据devid维护设备的IP地址，sessionConn[devid]表示了与devid对应的对话。sessionHandler负责发送数据给设备，一旦设备发送的心跳包超时，则将设备的状态(client[id])更新为false。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">main</span>
+
+<span style="color:#f92672">import</span> (
+    <span style="color:#e6db74">&#34;net&#34;</span>
+    <span style="color:#e6db74">&#34;bytes&#34;</span>
+    <span style="color:#e6db74">&#34;encoding/json&#34;</span>
+    <span style="color:#e6db74">&#34;encoding/binary&#34;</span>
+    <span style="color:#e6db74">&#34;math&#34;</span>
+    <span style="color:#e6db74">&#34;github.com/op/go-logging&#34;</span>
+    <span style="color:#e6db74">&#34;os&#34;</span>
+    <span style="color:#e6db74">&#34;time&#34;</span>
+)
+
+<span style="color:#66d9ef">type</span> <span style="color:#a6e22e">Dev</span> <span style="color:#66d9ef">struct</span> {
+    <span style="color:#a6e22e">Id</span> <span style="color:#66d9ef">int</span> <span style="color:#e6db74">`json:&#34;id&#34;`</span>
+    <span style="color:#a6e22e">Cmd</span> <span style="color:#66d9ef">string</span> <span style="color:#e6db74">`json:&#34;cmd&#34;`</span>
+}
+
+<span style="color:#66d9ef">type</span> <span style="color:#a6e22e">Status</span> <span style="color:#66d9ef">struct</span> {
+    <span style="color:#a6e22e">Id</span> <span style="color:#66d9ef">int</span> <span style="color:#e6db74">`json:&#34;id&#34;`</span>
+    <span style="color:#a6e22e">Status</span> <span style="color:#66d9ef">int</span> <span style="color:#e6db74">`json:&#34;status&#34;`</span>
+    <span style="color:#a6e22e">Type</span> <span style="color:#66d9ef">int</span> <span style="color:#e6db74">`json:&#34;type&#34;`</span>
+}
+
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">log</span> = <span style="color:#a6e22e">logging</span>.<span style="color:#a6e22e">MustGetLogger</span>(<span style="color:#e6db74">&#34;gaslog&#34;</span>)
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">logFormat</span> = <span style="color:#a6e22e">logging</span>.<span style="color:#a6e22e">MustStringFormatter</span>(
+    <span style="color:#e6db74">`%{color}%{time:15:04:05.000} %{shortfunc} | %{level:.4s} %{id:03x}%{color:reset} %{message}`</span>,
+)
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">socket</span> <span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">Conn</span>
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">client</span> = make(<span style="color:#66d9ef">map</span>[<span style="color:#66d9ef">int</span>]<span style="color:#66d9ef">bool</span>)
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">clientAddr</span> = make([]<span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">Addr</span>, <span style="color:#ae81ff">512</span>)
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">sessionConn</span> = make([]<span style="color:#f92672">*</span><span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">UDPConn</span>, <span style="color:#ae81ff">512</span>)
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">sessionChan</span> [<span style="color:#ae81ff">512</span>]<span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">ByteToFloat64</span>(<span style="color:#a6e22e">b</span> []<span style="color:#66d9ef">byte</span>) <span style="color:#66d9ef">float64</span> {
+    <span style="color:#a6e22e">bits</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">binary</span>.<span style="color:#a6e22e">BigEndian</span>.<span style="color:#a6e22e">Uint64</span>(<span style="color:#a6e22e">b</span>)
+    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">math</span>.<span style="color:#a6e22e">Float64frombits</span>(<span style="color:#a6e22e">bits</span>)
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">payloadHandler</span>(<span style="color:#a6e22e">conn</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">UDPConn</span>, <span style="color:#a6e22e">addr</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">UDPAddr</span>, <span style="color:#a6e22e">buff</span> []<span style="color:#66d9ef">byte</span>) {
+    <span style="color:#75715e">//log.Infof(&#34;new payload: %+v\n&#34;, buff)
+</span><span style="color:#75715e"></span>
+    <span style="color:#a6e22e">msgtype</span>, <span style="color:#a6e22e">devid</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">buff</span>[<span style="color:#ae81ff">0</span>], int(<span style="color:#a6e22e">buff</span>[<span style="color:#ae81ff">1</span>])
+    <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">client</span>[<span style="color:#a6e22e">devid</span>] <span style="color:#f92672">==</span> <span style="color:#66d9ef">false</span> {
+        <span style="color:#a6e22e">client</span>[<span style="color:#a6e22e">devid</span>] =<span style="color:#66d9ef">true</span>
+        <span style="color:#a6e22e">clientAddr</span>[<span style="color:#a6e22e">devid</span>] = <span style="color:#a6e22e">addr</span>
+        <span style="color:#a6e22e">sessionConn</span>[<span style="color:#a6e22e">devid</span>] = <span style="color:#a6e22e">conn</span>
+        <span style="color:#66d9ef">go</span> <span style="color:#a6e22e">sessionHandler</span>(<span style="color:#a6e22e">devid</span>)
+    } <span style="color:#66d9ef">else</span> <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">clientAddr</span>[<span style="color:#a6e22e">devid</span>] <span style="color:#f92672">!=</span> <span style="color:#a6e22e">addr</span> {
+        <span style="color:#a6e22e">clientAddr</span>[<span style="color:#a6e22e">devid</span>] = <span style="color:#a6e22e">addr</span>
+        <span style="color:#a6e22e">sessionConn</span>[<span style="color:#a6e22e">devid</span>] = <span style="color:#a6e22e">conn</span>
+    }
+
+    <span style="color:#66d9ef">switch</span> <span style="color:#a6e22e">msgtype</span> {
+    <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">0x0</span>: <span style="color:#75715e">// heartbeat
+</span><span style="color:#75715e"></span>        <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">payload</span> = make([]<span style="color:#66d9ef">byte</span>, <span style="color:#ae81ff">2</span>)
+        <span style="color:#a6e22e">payload</span>[<span style="color:#ae81ff">0</span>] = <span style="color:#ae81ff">0</span>
+        <span style="color:#a6e22e">payload</span>[<span style="color:#ae81ff">1</span>] = <span style="color:#ae81ff">1</span>
+        <span style="color:#a6e22e">sessionChan</span>[<span style="color:#a6e22e">devid</span>] <span style="color:#f92672">&lt;-</span> <span style="color:#a6e22e">payload</span>
+        <span style="color:#75715e">//conn.WriteTo([]byte(&#34;OK&#34;), addr)
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">0x1</span>: <span style="color:#75715e">// gas data
+</span><span style="color:#75715e"></span>        <span style="color:#75715e">//log.Noticef(&#34;buff: %+v\n&#34;, buff[2:60])
+</span><span style="color:#75715e"></span>        <span style="color:#a6e22e">socket</span>.<span style="color:#a6e22e">Write</span>(<span style="color:#a6e22e">buff</span>[<span style="color:#ae81ff">1</span>:])
+        <span style="color:#a6e22e">gasdata</span> <span style="color:#f92672">:=</span> make([]<span style="color:#66d9ef">float64</span>, <span style="color:#ae81ff">7</span>)
+        <span style="color:#66d9ef">for</span> <span style="color:#a6e22e">i</span><span style="color:#f92672">:=</span><span style="color:#ae81ff">0</span>; <span style="color:#a6e22e">i</span>&lt;<span style="color:#ae81ff">7</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">++</span> {
+            <span style="color:#a6e22e">gasdata</span>[<span style="color:#a6e22e">i</span>] = <span style="color:#a6e22e">ByteToFloat64</span>(<span style="color:#a6e22e">buff</span>[<span style="color:#ae81ff">2</span><span style="color:#f92672">+</span><span style="color:#ae81ff">4</span><span style="color:#f92672">+</span><span style="color:#ae81ff">8</span><span style="color:#f92672">*</span><span style="color:#a6e22e">i</span>:])
+        }
+        <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;%d: %f %f %f %f %f %f %f\n&#34;</span>, <span style="color:#a6e22e">devid</span>, <span style="color:#a6e22e">gasdata</span>[<span style="color:#ae81ff">0</span>], <span style="color:#a6e22e">gasdata</span>[<span style="color:#ae81ff">1</span>], <span style="color:#a6e22e">gasdata</span>[<span style="color:#ae81ff">2</span>], <span style="color:#a6e22e">gasdata</span>[<span style="color:#ae81ff">3</span>], <span style="color:#a6e22e">gasdata</span>[<span style="color:#ae81ff">4</span>], <span style="color:#a6e22e">gasdata</span>[<span style="color:#ae81ff">5</span>], <span style="color:#a6e22e">gasdata</span>[<span style="color:#ae81ff">6</span>])
+        <span style="color:#75715e">//conn.WriteToUDP([]byte(&#34;OK&#34;), addr)
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">0x2</span>:
+        <span style="color:#a6e22e">status</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">buff</span>[<span style="color:#ae81ff">2</span>]
+        <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;%d: status changed: %d\n&#34;</span>, <span style="color:#a6e22e">devid</span>, <span style="color:#a6e22e">status</span>)
+    }
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">handleClient</span>(<span style="color:#a6e22e">conn</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">UDPConn</span>) {
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">buff</span> = make([]<span style="color:#66d9ef">byte</span>, <span style="color:#ae81ff">512</span>)
+    <span style="color:#a6e22e">n</span>, <span style="color:#a6e22e">addr</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">ReadFromUDP</span>(<span style="color:#a6e22e">buff</span>[<span style="color:#ae81ff">0</span>:])
+    <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+        <span style="color:#66d9ef">return</span>
+    }
+
+    <span style="color:#a6e22e">payload</span> <span style="color:#f92672">:=</span> make([]<span style="color:#66d9ef">byte</span>, <span style="color:#a6e22e">n</span>)
+    copy(<span style="color:#a6e22e">payload</span>, <span style="color:#a6e22e">buff</span>)
+
+    <span style="color:#75715e">//log.Infof(&#34;payload.length=%d\n&#34;, n)
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">for</span> <span style="color:#a6e22e">i</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">bytes</span>.<span style="color:#a6e22e">Index</span>(<span style="color:#a6e22e">payload</span>[<span style="color:#ae81ff">0</span>:], []byte(<span style="color:#e6db74">&#34;hjhee&#34;</span>)); <span style="color:#a6e22e">i</span> <span style="color:#f92672">!=</span> <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>; <span style="color:#a6e22e">i</span> = <span style="color:#a6e22e">bytes</span>.<span style="color:#a6e22e">Index</span>(<span style="color:#a6e22e">payload</span>[<span style="color:#ae81ff">0</span>:], []byte(<span style="color:#e6db74">&#34;hjhee&#34;</span>)) {
+        <span style="color:#75715e">//log.Infof(&#34;payload: %+v\n&#34;, payload[i+5:])
+</span><span style="color:#75715e"></span>        <span style="color:#66d9ef">go</span> <span style="color:#a6e22e">payloadHandler</span>(<span style="color:#a6e22e">conn</span>, <span style="color:#a6e22e">addr</span>, <span style="color:#a6e22e">payload</span>[<span style="color:#a6e22e">i</span><span style="color:#f92672">+</span><span style="color:#ae81ff">5</span>:])
+        <span style="color:#a6e22e">payload</span> = <span style="color:#a6e22e">payload</span>[<span style="color:#a6e22e">i</span><span style="color:#f92672">+</span><span style="color:#ae81ff">5</span>:]
+    }
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">sessionHandler</span>(<span style="color:#a6e22e">id</span> <span style="color:#66d9ef">int</span>) {
+    <span style="color:#66d9ef">for</span> {
+        <span style="color:#66d9ef">select</span> {
+        <span style="color:#66d9ef">case</span> <span style="color:#a6e22e">b</span> <span style="color:#f92672">:=</span> <span style="color:#f92672">&lt;-</span><span style="color:#a6e22e">sessionChan</span>[<span style="color:#a6e22e">id</span>]:
+            <span style="color:#66d9ef">switch</span> <span style="color:#a6e22e">b</span>[<span style="color:#ae81ff">0</span>] {
+            <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">0x0</span>: <span style="color:#75715e">// heartbeat
+</span><span style="color:#75715e"></span>                <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;new heartbeat[id=%d]: %s\n&#34;</span>, <span style="color:#a6e22e">id</span>, <span style="color:#a6e22e">clientAddr</span>[<span style="color:#a6e22e">id</span>])
+                <span style="color:#a6e22e">conn</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">sessionConn</span>[<span style="color:#a6e22e">id</span>]
+                <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">WriteTo</span>([]byte(<span style="color:#e6db74">&#34;OK&#34;</span>), <span style="color:#a6e22e">clientAddr</span>[<span style="color:#a6e22e">id</span>])
+            <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">0x1</span>: <span style="color:#75715e">// device status update
+</span><span style="color:#75715e"></span>                <span style="color:#a6e22e">conn</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">sessionConn</span>[<span style="color:#a6e22e">id</span>]
+                <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">WriteTo</span>(<span style="color:#a6e22e">b</span>, <span style="color:#a6e22e">clientAddr</span>[<span style="color:#a6e22e">id</span>])
+                <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;status update[addr=%s]: %d\n&#34;</span>, <span style="color:#a6e22e">clientAddr</span>[<span style="color:#a6e22e">id</span>], <span style="color:#a6e22e">b</span>[<span style="color:#ae81ff">1</span>])
+            <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">0x3</span>: <span style="color:#75715e">// status query
+</span><span style="color:#75715e"></span>                <span style="color:#a6e22e">conn</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">sessionConn</span>[<span style="color:#a6e22e">id</span>]
+                <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">WriteTo</span>(<span style="color:#a6e22e">b</span>, <span style="color:#a6e22e">clientAddr</span>[<span style="color:#a6e22e">id</span>])
+            <span style="color:#66d9ef">default</span>:
+                <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;invalid data[id=%d]\n&#34;</span>, <span style="color:#a6e22e">id</span>)
+            }
+        <span style="color:#66d9ef">case</span> <span style="color:#f92672">&lt;-</span><span style="color:#a6e22e">time</span>.<span style="color:#a6e22e">After</span>(<span style="color:#ae81ff">30</span> <span style="color:#f92672">*</span> <span style="color:#a6e22e">time</span>.<span style="color:#a6e22e">Second</span>):
+            <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Noticef</span>(<span style="color:#e6db74">&#34;heartbeat timeout: id[%d]\n&#34;</span>, <span style="color:#a6e22e">id</span>)
+            <span style="color:#a6e22e">client</span>[<span style="color:#a6e22e">id</span>] = <span style="color:#66d9ef">false</span>
+            <span style="color:#66d9ef">return</span>
+        }
+    }
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">devHandler</span>() {
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">devSocket</span> = <span style="color:#e6db74">&#34;/tmp/devstatus.sock&#34;</span>
+    <span style="color:#a6e22e">os</span>.<span style="color:#a6e22e">Remove</span>(<span style="color:#a6e22e">devSocket</span>)
+    <span style="color:#a6e22e">conn</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">ListenPacket</span>(<span style="color:#e6db74">&#34;unixgram&#34;</span>, <span style="color:#a6e22e">devSocket</span>)
+    <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+        <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Fatalf</span>(<span style="color:#e6db74">&#34;devSocket create failed: %s\n&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">Error</span>())
+    }
+    <span style="color:#66d9ef">defer</span> <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">Close</span>()
+    <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;devSocket local addr: %s\n&#34;</span>, <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">LocalAddr</span>())
+
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">buff</span> = make([]<span style="color:#66d9ef">byte</span>, <span style="color:#ae81ff">512</span>)
+    <span style="color:#66d9ef">for</span> {
+        <span style="color:#a6e22e">n</span>, <span style="color:#a6e22e">_</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">ReadFrom</span>(<span style="color:#a6e22e">buff</span>)
+        <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+            <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Warningf</span>(<span style="color:#e6db74">&#34;devSocket read failed: %s\n&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">Error</span>())
+            <span style="color:#66d9ef">continue</span>
+        }
+        <span style="color:#a6e22e">reader</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">bytes</span>.<span style="color:#a6e22e">NewReader</span>(<span style="color:#a6e22e">buff</span>)
+        <span style="color:#a6e22e">decoder</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">json</span>.<span style="color:#a6e22e">NewDecoder</span>(<span style="color:#a6e22e">reader</span>)
+        <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">devCmd</span> <span style="color:#a6e22e">Dev</span>
+        <span style="color:#a6e22e">err</span> = <span style="color:#a6e22e">decoder</span>.<span style="color:#a6e22e">Decode</span>(<span style="color:#f92672">&amp;</span><span style="color:#a6e22e">devCmd</span>)
+        <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+            <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Warningf</span>(<span style="color:#e6db74">&#34;json decode failed: %s(error: %s)\n&#34;</span>, string(<span style="color:#a6e22e">buff</span>[<span style="color:#ae81ff">0</span>:<span style="color:#a6e22e">n</span>]), <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">Error</span>())
+            <span style="color:#66d9ef">continue</span>
+        }
+        <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;new command: %+v\n&#34;</span>, <span style="color:#a6e22e">devCmd</span>)
+        <span style="color:#66d9ef">switch</span> <span style="color:#a6e22e">devCmd</span>.<span style="color:#a6e22e">Cmd</span> {
+        <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#34;devStart&#34;</span>:
+            <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">payload</span> = make([]<span style="color:#66d9ef">byte</span>, <span style="color:#ae81ff">2</span>)
+            <span style="color:#a6e22e">payload</span>[<span style="color:#ae81ff">0</span>] = <span style="color:#ae81ff">1</span>
+            <span style="color:#a6e22e">payload</span>[<span style="color:#ae81ff">1</span>] = <span style="color:#ae81ff">0x3</span>
+            <span style="color:#a6e22e">sessionChan</span>[<span style="color:#a6e22e">devCmd</span>.<span style="color:#a6e22e">Id</span>] <span style="color:#f92672">&lt;-</span> <span style="color:#a6e22e">payload</span>
+        <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#34;devStop&#34;</span>:
+            <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">payload</span> = make([]<span style="color:#66d9ef">byte</span>, <span style="color:#ae81ff">2</span>)
+            <span style="color:#a6e22e">payload</span>[<span style="color:#ae81ff">0</span>] = <span style="color:#ae81ff">1</span>
+            <span style="color:#a6e22e">payload</span>[<span style="color:#ae81ff">1</span>] = <span style="color:#ae81ff">0x0</span>
+            <span style="color:#a6e22e">sessionChan</span>[<span style="color:#a6e22e">devCmd</span>.<span style="color:#a6e22e">Id</span>] <span style="color:#f92672">&lt;-</span> <span style="color:#a6e22e">payload</span>
+        <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#34;devQuery&#34;</span>:
+            <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">payload</span> = make([]<span style="color:#66d9ef">byte</span>, <span style="color:#ae81ff">1</span>)
+            <span style="color:#a6e22e">payload</span>[<span style="color:#ae81ff">0</span>] =<span style="color:#ae81ff">2</span>
+            <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">client</span>[<span style="color:#a6e22e">devCmd</span>.<span style="color:#a6e22e">Id</span>] {
+                <span style="color:#a6e22e">sessionChan</span>[<span style="color:#a6e22e">devCmd</span>.<span style="color:#a6e22e">Id</span>] <span style="color:#f92672">&lt;-</span> <span style="color:#a6e22e">payload</span>
+            } <span style="color:#66d9ef">else</span> {
+                <span style="color:#a6e22e">status</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">Status</span>{<span style="color:#a6e22e">Id</span>: <span style="color:#a6e22e">devCmd</span>.<span style="color:#a6e22e">Id</span>, <span style="color:#a6e22e">Status</span>: <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>, <span style="color:#a6e22e">Type</span>: <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>}
+                <span style="color:#a6e22e">statusStr</span>, <span style="color:#a6e22e">_</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">json</span>.<span style="color:#a6e22e">Marshal</span>(<span style="color:#a6e22e">status</span>)
+                <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;status[id=%d]=%s\n&#34;</span>, <span style="color:#a6e22e">status</span>.<span style="color:#a6e22e">Id</span>, <span style="color:#a6e22e">statusStr</span>)
+            }
+            <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;new Query[id=%d]\n&#34;</span>, <span style="color:#a6e22e">devCmd</span>.<span style="color:#a6e22e">Id</span>)
+        }
+    }
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {
+    <span style="color:#a6e22e">logging</span>.<span style="color:#a6e22e">SetFormatter</span>(<span style="color:#a6e22e">logFormat</span>)
+
+    <span style="color:#66d9ef">for</span> <span style="color:#a6e22e">i</span><span style="color:#f92672">:=</span><span style="color:#ae81ff">0</span>; <span style="color:#a6e22e">i</span>&lt;<span style="color:#ae81ff">512</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">++</span> {
+        <span style="color:#a6e22e">sessionChan</span>[<span style="color:#a6e22e">i</span>] = make(<span style="color:#66d9ef">chan</span> []<span style="color:#66d9ef">byte</span>, <span style="color:#ae81ff">5</span>)
+    }
+
+    <span style="color:#66d9ef">go</span> <span style="color:#a6e22e">devHandler</span>()
+
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">err</span> <span style="color:#66d9ef">error</span>
+    <span style="color:#a6e22e">socket</span>, <span style="color:#a6e22e">err</span> = <span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">Dial</span>(<span style="color:#e6db74">&#34;unixgram&#34;</span>, <span style="color:#e6db74">&#34;/tmp/gasdata.sock&#34;</span>)
+    <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+        <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Fatal</span>(<span style="color:#e6db74">&#34;Unix Domain Socket create failed&#34;</span>)
+    }
+    <span style="color:#66d9ef">defer</span> <span style="color:#a6e22e">socket</span>.<span style="color:#a6e22e">Close</span>()
+    <span style="color:#a6e22e">udpAddr</span>, <span style="color:#a6e22e">_</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">ResolveUDPAddr</span>(<span style="color:#e6db74">&#34;udp4&#34;</span>, <span style="color:#e6db74">&#34;:5683&#34;</span>)
+    <span style="color:#a6e22e">conn</span>, <span style="color:#a6e22e">_</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">ListenUDP</span>(<span style="color:#e6db74">&#34;udp&#34;</span>, <span style="color:#a6e22e">udpAddr</span>)
+    <span style="color:#66d9ef">defer</span> <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">Close</span>()
+    <span style="color:#66d9ef">for</span> {
+        <span style="color:#a6e22e">handleClient</span>(<span style="color:#a6e22e">conn</span>)
+    }
+}
+</code></pre></div><h1 id="templateserver">templateServer</h1>
+<p>templateServer负责生成HTML模板，可以预处理加快生成速度。另一方面也提供REST API，/api/status/:id用于给设备发送命令变更工作状态，GET操作查询，POST操作更新。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">main</span>
+
+<span style="color:#f92672">import</span> (
+    <span style="color:#e6db74">&#34;net&#34;</span>
+    <span style="color:#e6db74">&#34;net/http&#34;</span>
+    <span style="color:#e6db74">&#34;html/template&#34;</span>
+    <span style="color:#e6db74">&#34;github.com/julienschmidt/httprouter&#34;</span>
+    <span style="color:#e6db74">&#34;github.com/op/go-logging&#34;</span>
+    <span style="color:#e6db74">&#34;io/ioutil&#34;</span>
+    <span style="color:#e6db74">&#34;strconv&#34;</span>
+    <span style="color:#e6db74">&#34;encoding/json&#34;</span>
+)
+
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">log</span> = <span style="color:#a6e22e">logging</span>.<span style="color:#a6e22e">MustGetLogger</span>(<span style="color:#e6db74">&#34;sselog&#34;</span>)
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">logFormat</span> = <span style="color:#a6e22e">logging</span>.<span style="color:#a6e22e">MustStringFormatter</span>(
+    <span style="color:#e6db74">`%{color}%{time:15:04:05.000} %{shortfunc} | %{level:.4s} %{id:03x}%{color:reset} %{message}`</span>,
+)
+
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">devSocket</span> <span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">Conn</span>
+
+<span style="color:#66d9ef">type</span> <span style="color:#a6e22e">Dev</span> <span style="color:#66d9ef">struct</span> {
+    <span style="color:#a6e22e">Id</span> <span style="color:#66d9ef">int</span> <span style="color:#e6db74">`json:&#34;id&#34;`</span>
+    <span style="color:#a6e22e">Cmd</span> <span style="color:#66d9ef">string</span> <span style="color:#e6db74">`json:&#34;cmd&#34;`</span>
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">newTemplateHandler</span>() (<span style="color:#66d9ef">func</span>(<span style="color:#a6e22e">w</span> <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">ResponseWriter</span>, <span style="color:#a6e22e">r</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">Request</span>, <span style="color:#a6e22e">ps</span> <span style="color:#a6e22e">httprouter</span>.<span style="color:#a6e22e">Params</span>), <span style="color:#66d9ef">error</span>) {
+<span style="color:#75715e">/*
+</span><span style="color:#75715e">    tmpl, err := template.ParseFiles(&#34;templates/layout.html&#34;)
+</span><span style="color:#75715e">    if err != nil {
+</span><span style="color:#75715e">        return nil, err
+</span><span style="color:#75715e">    }
+</span><span style="color:#75715e">*/</span>
+    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">func</span>(<span style="color:#a6e22e">w</span> <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">ResponseWriter</span>, <span style="color:#a6e22e">r</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">Request</span>, <span style="color:#a6e22e">ps</span> <span style="color:#a6e22e">httprouter</span>.<span style="color:#a6e22e">Params</span>) {
+        <span style="color:#a6e22e">id</span>, <span style="color:#a6e22e">_</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">strconv</span>.<span style="color:#a6e22e">Atoi</span>(<span style="color:#a6e22e">ps</span>.<span style="color:#a6e22e">ByName</span>(<span style="color:#e6db74">&#34;id&#34;</span>))
+        <span style="color:#a6e22e">tmpl</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">template</span>.<span style="color:#a6e22e">ParseFiles</span>(<span style="color:#e6db74">&#34;templates/layout.html&#34;</span>)
+        <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+            <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Errorf</span>(<span style="color:#e6db74">&#34;template Parse failed: %s\n&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">Error</span>())
+            <span style="color:#66d9ef">return</span>
+        }
+        <span style="color:#a6e22e">err</span> = <span style="color:#a6e22e">tmpl</span>.<span style="color:#a6e22e">Execute</span>(<span style="color:#a6e22e">w</span>, <span style="color:#a6e22e">Dev</span>{<span style="color:#a6e22e">Id</span>: <span style="color:#a6e22e">id</span>})
+        <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+            <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Errorf</span>(<span style="color:#e6db74">&#34;template execute failed: %s\n&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">Error</span>())
+        }
+    }, <span style="color:#66d9ef">nil</span>
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">statusHandler</span>(<span style="color:#a6e22e">w</span> <span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">ResponseWriter</span>, <span style="color:#a6e22e">r</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">Request</span>, <span style="color:#a6e22e">ps</span> <span style="color:#a6e22e">httprouter</span>.<span style="color:#a6e22e">Params</span>) {
+    <span style="color:#a6e22e">id</span>, <span style="color:#a6e22e">_</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">strconv</span>.<span style="color:#a6e22e">Atoi</span>(<span style="color:#a6e22e">ps</span>.<span style="color:#a6e22e">ByName</span>(<span style="color:#e6db74">&#34;id&#34;</span>))
+    <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">r</span>.<span style="color:#a6e22e">Method</span> <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;POST&#34;</span> {
+        <span style="color:#a6e22e">result</span>, <span style="color:#a6e22e">_</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">ioutil</span>.<span style="color:#a6e22e">ReadAll</span>(<span style="color:#a6e22e">r</span>.<span style="color:#a6e22e">Body</span>)
+        <span style="color:#a6e22e">r</span>.<span style="color:#a6e22e">Body</span>.<span style="color:#a6e22e">Close</span>()
+        <span style="color:#a6e22e">devSocket</span>.<span style="color:#a6e22e">Write</span>([]byte(<span style="color:#a6e22e">result</span>))
+        <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Infof</span>(<span style="color:#e6db74">&#34;status.post: %s\n&#34;</span>, <span style="color:#a6e22e">result</span>)
+    }
+    <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">r</span>.<span style="color:#a6e22e">Method</span> <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;GET&#34;</span> {
+        <span style="color:#a6e22e">devCmd</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">Dev</span>{<span style="color:#a6e22e">Id</span>: <span style="color:#a6e22e">id</span>, <span style="color:#a6e22e">Cmd</span>: <span style="color:#e6db74">&#34;devQuery&#34;</span>}
+        <span style="color:#a6e22e">cmd</span>, <span style="color:#a6e22e">_</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">json</span>.<span style="color:#a6e22e">Marshal</span>(<span style="color:#a6e22e">devCmd</span>)
+        <span style="color:#a6e22e">devSocket</span>.<span style="color:#a6e22e">Write</span>([]byte(<span style="color:#a6e22e">cmd</span>))
+    }
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {
+    <span style="color:#a6e22e">logging</span>.<span style="color:#a6e22e">SetFormatter</span>(<span style="color:#a6e22e">logFormat</span>)
+
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">err</span> <span style="color:#66d9ef">error</span>
+    <span style="color:#a6e22e">devSocket</span>, <span style="color:#a6e22e">err</span> = <span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">Dial</span>(<span style="color:#e6db74">&#34;unixgram&#34;</span>, <span style="color:#e6db74">&#34;/tmp/devstatus.sock&#34;</span>)
+    <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+        <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Fatalf</span>(<span style="color:#e6db74">&#34;socket dial failed: %s\n&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">Error</span>())
+    }
+    <span style="color:#a6e22e">templateHandler</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">newTemplateHandler</span>()
+    <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+        <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Fatalf</span>(<span style="color:#e6db74">&#34;template parse failed: %s\n&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">Error</span>())
+    }
+
+    <span style="color:#a6e22e">router</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">httprouter</span>.<span style="color:#a6e22e">New</span>()
+    <span style="color:#a6e22e">router</span>.<span style="color:#a6e22e">GET</span>(<span style="color:#e6db74">&#34;/node/:id&#34;</span>, <span style="color:#a6e22e">templateHandler</span>)
+    <span style="color:#a6e22e">router</span>.<span style="color:#a6e22e">POST</span>(<span style="color:#e6db74">&#34;/api/status/:id&#34;</span>, <span style="color:#a6e22e">statusHandler</span>)
+    <span style="color:#a6e22e">router</span>.<span style="color:#a6e22e">GET</span>(<span style="color:#e6db74">&#34;/api/status/:id&#34;</span>, <span style="color:#a6e22e">statusHandler</span>)
+    <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Fatal</span>(<span style="color:#a6e22e">http</span>.<span style="color:#a6e22e">ListenAndServe</span>(<span style="color:#e6db74">&#34;localhost:10242&#34;</span>, <span style="color:#a6e22e">router</span>))
+}
+</code></pre></div><p>HTML 模板</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-html" data-lang="html"><span style="color:#75715e">&lt;!DOCTYPE html&gt;</span>
+&lt;<span style="color:#f92672">html</span>&gt;
+&lt;<span style="color:#f92672">head</span>&gt;
+	&lt;<span style="color:#f92672">meta</span> <span style="color:#a6e22e">charset</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;utf-8&#34;</span>&gt;
+	&lt;<span style="color:#f92672">title</span>&gt;Dev{{.Id}}&lt;/<span style="color:#f92672">title</span>&gt;
+	&lt;<span style="color:#f92672">link</span> <span style="color:#a6e22e">rel</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;stylesheet&#34;</span> <span style="color:#a6e22e">href</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/css/chartist.min.css&#34;</span>&gt;
+	&lt;<span style="color:#f92672">script</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/js/jquery-2.2.4.min.js&#34;</span>&gt;&lt;/<span style="color:#f92672">script</span>&gt;
+	&lt;<span style="color:#f92672">script</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/js/chartist.min.js&#34;</span>&gt;&lt;/<span style="color:#f92672">script</span>&gt;
+	&lt;<span style="color:#f92672">script</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/js/chartist-plugin-axistitle.js&#34;</span>&gt;&lt;/<span style="color:#f92672">script</span>&gt;
+	&lt;<span style="color:#f92672">script</span>&gt;
+<span style="color:#a6e22e">$</span>(document).<span style="color:#a6e22e">ready</span>(<span style="color:#66d9ef">function</span>(){
+	<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">data</span> <span style="color:#f92672">=</span> {
+		<span style="color:#75715e">// A labels array that can contain any sort of values
+</span><span style="color:#75715e"></span>		<span style="color:#a6e22e">labels</span><span style="color:#f92672">:</span> [],
+		<span style="color:#75715e">// Our series array that contains series objects or in this case series data arrays
+</span><span style="color:#75715e"></span>		<span style="color:#a6e22e">series</span><span style="color:#f92672">:</span> [{
+			<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;SO2&#34;</span>,
+			<span style="color:#a6e22e">data</span><span style="color:#f92672">:</span> []
+		}, {
+			<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;NO2&#34;</span>,
+			<span style="color:#a6e22e">data</span><span style="color:#f92672">:</span> []
+		}, {
+			<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;O3&#34;</span>,
+			<span style="color:#a6e22e">data</span><span style="color:#f92672">:</span> []
+		}, {
+			<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;CO&#34;</span>,
+			<span style="color:#a6e22e">data</span><span style="color:#f92672">:</span> []
+		}, {
+			<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;RH&#34;</span>,
+			<span style="color:#a6e22e">data</span><span style="color:#f92672">:</span> []
+		}, {
+			<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Temp&#34;</span>,
+			<span style="color:#a6e22e">data</span><span style="color:#f92672">:</span> []
+		}]
+	};
+
+	<span style="color:#75715e">// Create a new line chart object where as first parameter we pass in a selector
+</span><span style="color:#75715e"></span>	<span style="color:#75715e">// that is resolving to our chart container element. The Second parameter
+</span><span style="color:#75715e"></span>	<span style="color:#75715e">// is the actual data object.
+</span><span style="color:#75715e"></span>	<span style="color:#a6e22e">chart</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Chartist</span>.<span style="color:#a6e22e">Line</span>(<span style="color:#e6db74">&#39;.ct-chart&#39;</span>, <span style="color:#a6e22e">data</span>, {
+		<span style="color:#a6e22e">chartPadding</span><span style="color:#f92672">:</span> {
+			<span style="color:#a6e22e">top</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">30</span>,
+			<span style="color:#a6e22e">right</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">0</span>,
+			<span style="color:#a6e22e">bottom</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">30</span>,
+			<span style="color:#a6e22e">left</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">20</span>
+		},
+		<span style="color:#a6e22e">plugins</span><span style="color:#f92672">:</span> [
+			<span style="color:#a6e22e">Chartist</span>.<span style="color:#a6e22e">plugins</span>.<span style="color:#a6e22e">ctAxisTitle</span>({
+				<span style="color:#a6e22e">axisX</span><span style="color:#f92672">:</span> {
+					<span style="color:#a6e22e">axisTitle</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;Time (mins)&#39;</span>,
+					<span style="color:#a6e22e">axisClass</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;ct-axis-title&#39;</span>,
+					<span style="color:#a6e22e">offset</span><span style="color:#f92672">:</span> {
+						<span style="color:#a6e22e">x</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">0</span>,
+						<span style="color:#a6e22e">y</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">50</span>
+					},
+					<span style="color:#a6e22e">textAnchor</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;middle&#39;</span>
+				},
+				<span style="color:#a6e22e">axisY</span><span style="color:#f92672">:</span> {
+					<span style="color:#a6e22e">axisTitle</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;Concentrations (ppb)&#39;</span>,
+					<span style="color:#a6e22e">axisClass</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;ct-axis-title&#39;</span>,
+					<span style="color:#a6e22e">offset</span><span style="color:#f92672">:</span> {
+						<span style="color:#a6e22e">x</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">0</span>,
+						<span style="color:#a6e22e">y</span><span style="color:#f92672">:</span> <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>
+					},
+					<span style="color:#a6e22e">flipTitle</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">false</span>
+				}
+			})
+		]
+	});
+	
+	<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">source</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">EventSource</span>(<span style="color:#e6db74">&#34;/api/events/data.get&#34;</span>);
+	<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">indx</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+	<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">devid</span> <span style="color:#f92672">=</span> window.<span style="color:#a6e22e">location</span>.<span style="color:#a6e22e">pathname</span>.<span style="color:#a6e22e">split</span>(<span style="color:#e6db74">&#39;/&#39;</span>).<span style="color:#a6e22e">pop</span>();
+	<span style="color:#a6e22e">source</span>.<span style="color:#a6e22e">onmessage</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">function</span>(<span style="color:#a6e22e">evt</span>) {
+		<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">payload</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">JSON</span>.<span style="color:#a6e22e">parse</span>(<span style="color:#a6e22e">evt</span>.<span style="color:#a6e22e">data</span>);
+		<span style="color:#66d9ef">if</span>(<span style="color:#a6e22e">payload</span>.<span style="color:#a6e22e">id</span> <span style="color:#f92672">!=</span> <span style="color:#a6e22e">devid</span>){
+			<span style="color:#66d9ef">return</span>;
+		}
+		<span style="color:#a6e22e">chart</span>.<span style="color:#a6e22e">data</span>.<span style="color:#a6e22e">labels</span>.<span style="color:#a6e22e">push</span>(<span style="color:#a6e22e">indx</span>);
+		<span style="color:#a6e22e">indx</span><span style="color:#f92672">++</span>;
+		<span style="color:#66d9ef">if</span>(<span style="color:#a6e22e">chart</span>.<span style="color:#a6e22e">data</span>.<span style="color:#a6e22e">labels</span>.<span style="color:#a6e22e">length</span><span style="color:#f92672">&gt;</span><span style="color:#ae81ff">10</span>)
+			<span style="color:#a6e22e">chart</span>.<span style="color:#a6e22e">data</span>.<span style="color:#a6e22e">labels</span>.<span style="color:#a6e22e">shift</span>();
+		<span style="color:#66d9ef">for</span>(<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">i</span><span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">&lt;</span><span style="color:#a6e22e">chart</span>.<span style="color:#a6e22e">data</span>.<span style="color:#a6e22e">series</span>.<span style="color:#a6e22e">length</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">++</span>){
+			<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">s</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">chart</span>.<span style="color:#a6e22e">data</span>.<span style="color:#a6e22e">series</span>[<span style="color:#a6e22e">i</span>];
+			<span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">data</span>.<span style="color:#a6e22e">push</span>(Math.<span style="color:#a6e22e">sin</span>(Math.<span style="color:#a6e22e">random</span>()<span style="color:#f92672">*</span><span style="color:#ae81ff">2</span><span style="color:#f92672">*</span>Math.<span style="color:#a6e22e">PI</span>));
+			<span style="color:#66d9ef">if</span>(<span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">data</span>.<span style="color:#a6e22e">length</span><span style="color:#f92672">&gt;</span><span style="color:#ae81ff">10</span>){
+				<span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">data</span>.<span style="color:#a6e22e">shift</span>();
+			}
+		}
+		<span style="color:#a6e22e">chart</span>.<span style="color:#a6e22e">update</span>();
+		
+		<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">row</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;&#39;</span>;
+		<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">row</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;&lt;tr&gt;&lt;th&gt;&#39;</span> <span style="color:#f92672">+</span> Math.<span style="color:#a6e22e">round</span>(<span style="color:#a6e22e">payload</span>.<span style="color:#a6e22e">data</span>[<span style="color:#ae81ff">0</span>]) <span style="color:#f92672">+</span> <span style="color:#e6db74">&#39;&lt;/th&gt;&#39;</span>;
+		<span style="color:#66d9ef">for</span>(<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">i</span><span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">&lt;</span><span style="color:#ae81ff">7</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">++</span>){
+			<span style="color:#a6e22e">row</span> <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;&lt;th&gt;&#39;</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">payload</span>.<span style="color:#a6e22e">data</span>[<span style="color:#a6e22e">i</span>].<span style="color:#a6e22e">toPrecision</span>(<span style="color:#ae81ff">4</span>) <span style="color:#f92672">+</span> <span style="color:#e6db74">&#39;&lt;/th&gt;&#39;</span>;
+		}
+		<span style="color:#a6e22e">$</span>(<span style="color:#e6db74">&#39;#tbCon tbody&#39;</span>).<span style="color:#a6e22e">prepend</span>(<span style="color:#a6e22e">row</span>);
+		<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">rows</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">$</span>(<span style="color:#e6db74">&#39;#tbCon tbody tr&#39;</span>);
+		<span style="color:#66d9ef">if</span>(<span style="color:#a6e22e">rows</span>.<span style="color:#a6e22e">length</span> <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">10</span>){
+			<span style="color:#a6e22e">rows</span>.<span style="color:#a6e22e">last</span>().<span style="color:#a6e22e">remove</span>();
+		}
+	}
+});
+&lt;/<span style="color:#f92672">script</span>&gt;
+&lt;<span style="color:#f92672">script</span>&gt;
+<span style="color:#a6e22e">$</span>(document).<span style="color:#a6e22e">ready</span>(<span style="color:#66d9ef">function</span>(){
+	<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">devid</span> <span style="color:#f92672">=</span> window.<span style="color:#a6e22e">location</span>.<span style="color:#a6e22e">pathname</span>.<span style="color:#a6e22e">split</span>(<span style="color:#e6db74">&#39;/&#39;</span>).<span style="color:#a6e22e">pop</span>();
+	
+	<span style="color:#a6e22e">$</span>(<span style="color:#e6db74">&#39;#devCmd&#39;</span>).<span style="color:#a6e22e">submit</span>(<span style="color:#66d9ef">function</span>(<span style="color:#a6e22e">evt</span>){
+		<span style="color:#a6e22e">evt</span>.<span style="color:#a6e22e">preventDefault</span>();
+		<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">cmd</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">$</span>(document.<span style="color:#a6e22e">activeElement</span>).<span style="color:#a6e22e">attr</span>(<span style="color:#e6db74">&#39;name&#39;</span>);
+		<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">serize</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">JSON</span>.<span style="color:#a6e22e">stringify</span>({<span style="color:#a6e22e">id</span><span style="color:#f92672">:</span> parseInt(<span style="color:#a6e22e">devid</span>), <span style="color:#a6e22e">cmd</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">cmd</span>});
+		<span style="color:#a6e22e">$</span>.<span style="color:#a6e22e">post</span>(<span style="color:#e6db74">&#34;/api/status/&#34;</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">devid</span>, <span style="color:#a6e22e">serize</span>);
+		<span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;request sent:&#39;</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">serize</span>);
+	});
+	
+	<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">devStatusSource</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">EventSource</span>(<span style="color:#e6db74">&#34;/api/event/status/&#34;</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">devid</span>);
+	<span style="color:#a6e22e">devStatusSource</span>.<span style="color:#a6e22e">onmessage</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">function</span>(<span style="color:#a6e22e">evt</span>) {
+		<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">payload</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">JSON</span>.<span style="color:#a6e22e">parse</span>(<span style="color:#a6e22e">evt</span>.<span style="color:#a6e22e">data</span>);
+		
+		<span style="color:#66d9ef">switch</span>(<span style="color:#a6e22e">payload</span>.<span style="color:#a6e22e">status</span>) {
+		<span style="color:#66d9ef">case</span> <span style="color:#ae81ff">0</span><span style="color:#f92672">:</span>
+			<span style="color:#a6e22e">$</span>(<span style="color:#e6db74">&#39;#devStatus&#39;</span>).<span style="color:#a6e22e">text</span>(<span style="color:#e6db74">&#34;停止采集&#34;</span>);
+			<span style="color:#66d9ef">break</span>;
+		<span style="color:#66d9ef">case</span> <span style="color:#ae81ff">1</span><span style="color:#f92672">:</span>
+			<span style="color:#a6e22e">$</span>(<span style="color:#e6db74">&#39;#devStatus&#39;</span>).<span style="color:#a6e22e">text</span>(<span style="color:#e6db74">&#34;正在采集&#34;</span>);
+			<span style="color:#66d9ef">break</span>;
+		<span style="color:#66d9ef">default</span><span style="color:#f92672">:</span>
+			<span style="color:#a6e22e">$</span>(<span style="color:#e6db74">&#39;#devStatus&#39;</span>).<span style="color:#a6e22e">text</span>(<span style="color:#e6db74">&#34;无法获取&#34;</span>);
+			<span style="color:#66d9ef">break</span>;
+		}
+	}
+	
+	<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">source</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">EventSource</span>(<span style="color:#e6db74">&#34;/api/events/data.get&#34;</span>);
+	<span style="color:#a6e22e">source</span>.<span style="color:#a6e22e">onmessage</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">function</span>(<span style="color:#a6e22e">evt</span>) {
+		<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">payload</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">JSON</span>.<span style="color:#a6e22e">parse</span>(<span style="color:#a6e22e">evt</span>.<span style="color:#a6e22e">data</span>);
+		<span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#34;[status]new event:&#34;</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">payload</span>);
+	}
+});
+&lt;/<span style="color:#f92672">script</span>&gt;
+&lt;/<span style="color:#f92672">head</span>&gt;
+&lt;<span style="color:#f92672">body</span>&gt;
+&lt;<span style="color:#f92672">header</span>&gt;
+	&lt;<span style="color:#f92672">div</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;hd-title&#34;</span> <span style="color:#a6e22e">style</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;text-align: center;&#34;</span>&gt;检测节点{{.Id}}&lt;/<span style="color:#f92672">div</span>&gt;
+&lt;/<span style="color:#f92672">header</span>&gt;
+&lt;<span style="color:#f92672">main</span>&gt;
+	&lt;<span style="color:#f92672">section</span>&gt;
+		&lt;<span style="color:#f92672">div</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devStatus&#34;</span> <span style="color:#a6e22e">style</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;text-align: center;&#34;</span>&gt;
+			&lt;<span style="color:#f92672">form</span> <span style="color:#a6e22e">id</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devCmd&#34;</span>&gt;
+					&lt;<span style="color:#f92672">label</span>&gt;运行状态：&lt;/<span style="color:#f92672">label</span>&gt;
+					&lt;<span style="color:#f92672">label</span> <span style="color:#a6e22e">id</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devStatus&#34;</span>&gt;无法获取设备信息&lt;/<span style="color:#f92672">label</span>&gt;
+					&lt;<span style="color:#f92672">input</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devBut&#34;</span> <span style="color:#a6e22e">type</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;submit&#34;</span> <span style="color:#a6e22e">name</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devStart&#34;</span> <span style="color:#a6e22e">value</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Start&#34;</span> /&gt;
+					&lt;<span style="color:#f92672">input</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devBut&#34;</span> <span style="color:#a6e22e">type</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;submit&#34;</span> <span style="color:#a6e22e">name</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devStop&#34;</span> <span style="color:#a6e22e">value</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Stop&#34;</span> /&gt;
+			&lt;/<span style="color:#f92672">form</span>&gt;
+		&lt;/<span style="color:#f92672">div</span>&gt;
+	&lt;/<span style="color:#f92672">section</span>&gt;
+	&lt;<span style="color:#f92672">section</span>&gt;
+		&lt;<span style="color:#f92672">div</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;ct-chart ct-major-eleventh&#34;</span> <span style="color:#a6e22e">style</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;width: 80%; margin-left: auto; margin-right: auto;&#34;</span>&gt;&lt;/<span style="color:#f92672">div</span>&gt;
+	&lt;/<span style="color:#f92672">section</span>&gt;
+	&lt;<span style="color:#f92672">section</span>&gt;
+		&lt;<span style="color:#f92672">table</span> <span style="color:#a6e22e">id</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;tbCon&#34;</span> <span style="color:#a6e22e">style</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;width: 60%; margin-left: auto; margin-right: auto;&#34;</span>&gt;
+			&lt;<span style="color:#f92672">colgroup</span>&gt;
+				&lt;<span style="color:#f92672">col</span> <span style="color:#a6e22e">width</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;10%&#34;</span>&gt;
+				&lt;<span style="color:#f92672">col</span> <span style="color:#a6e22e">width</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;15%&#34;</span>&gt;
+				&lt;<span style="color:#f92672">col</span> <span style="color:#a6e22e">width</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;15%&#34;</span>&gt;
+				&lt;<span style="color:#f92672">col</span> <span style="color:#a6e22e">width</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;15%&#34;</span>&gt;
+				&lt;<span style="color:#f92672">col</span> <span style="color:#a6e22e">width</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;15%&#34;</span>&gt;
+				&lt;<span style="color:#f92672">col</span> <span style="color:#a6e22e">width</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;15%&#34;</span>&gt;
+				&lt;<span style="color:#f92672">col</span> <span style="color:#a6e22e">width</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;15%&#34;</span>&gt;
+			&lt;/<span style="color:#f92672">colgroup</span>&gt;
+			&lt;<span style="color:#f92672">thead</span>&gt;
+				&lt;<span style="color:#f92672">tr</span>&gt;
+					&lt;<span style="color:#f92672">th</span>&gt;Time&lt;/<span style="color:#f92672">th</span>&gt;
+					&lt;<span style="color:#f92672">th</span>&gt;SO&lt;<span style="color:#f92672">sub</span>&gt;2&lt;/<span style="color:#f92672">sub</span>&gt;&lt;/<span style="color:#f92672">th</span>&gt;
+					&lt;<span style="color:#f92672">th</span>&gt;NO&lt;<span style="color:#f92672">sub</span>&gt;2&lt;/<span style="color:#f92672">sub</span>&gt;&lt;/<span style="color:#f92672">th</span>&gt;
+					&lt;<span style="color:#f92672">th</span>&gt;O&lt;<span style="color:#f92672">sub</span>&gt;3&lt;/<span style="color:#f92672">sub</span>&gt;&lt;/<span style="color:#f92672">th</span>&gt;
+					&lt;<span style="color:#f92672">th</span>&gt;CO&lt;/<span style="color:#f92672">th</span>&gt;
+					&lt;<span style="color:#f92672">th</span>&gt;RH&lt;/<span style="color:#f92672">th</span>&gt;
+					&lt;<span style="color:#f92672">th</span>&gt;Temp&lt;/<span style="color:#f92672">th</span>&gt;
+				&lt;/<span style="color:#f92672">tr</span>&gt;
+			&lt;/<span style="color:#f92672">thead</span>&gt;
+			&lt;<span style="color:#f92672">tbody</span>&gt;
+			&lt;/<span style="color:#f92672">tbody</span>&gt;
+		&lt;/<span style="color:#f92672">table</span>&gt;
+	&lt;/<span style="color:#f92672">section</span>&gt;
+&lt;/<span style="color:#f92672">main</span>&gt;
+&lt;/<span style="color:#f92672">body</span>&gt;
+&lt;/<span style="color:#f92672">html</span>&gt;
+</code></pre></div>
+</main>
+
+    <footer>
+      
+<script>
+(function() {
+  function center_el(tagName) {
+    var tags = document.getElementsByTagName(tagName), i, tag;
+    for (i = 0; i < tags.length; i++) {
+      tag = tags[i];
+      var parent = tag.parentElement;
+      
+      if (parent.childNodes.length === 1) {
+        
+        if (parent.nodeName === 'A') {
+          parent = parent.parentElement;
+          if (parent.childNodes.length != 1) continue;
+        }
+        if (parent.nodeName === 'P') parent.style.textAlign = 'center';
+      }
+    }
+  }
+  var tagNames = ['img', 'embed', 'object'];
+  for (var i = 0; i < tagNames.length; i++) {
+    center_el(tagNames[i]);
+  }
+})();
+</script>
+
+      
+    </footer>
+  </body>
+</html>
+

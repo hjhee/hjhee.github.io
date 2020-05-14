@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Introduction to Qt Quick Development | Hjhee Blog</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/fonts.css" />
+    
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-rc.1/dist/katex.min.css" integrity="sha384-D+9gmBxUQogRLqvARvNLmA9hS2x//eK1FhVb9PiU86gmcrBrJAQT8okdJ4LMp2uv" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.10.0-rc.1/dist/katex.min.js" integrity="sha384-483A6DwYfKeDa0Q52fJmxFXkcPCFfnXMoXblOkJ4JcA8zATN6Tm78UNL72AKk+0O" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.10.0-rc.1/dist/contrib/auto-render.min.js" integrity="sha384-yACMu8JWxKzSp/C1YV86pzGiQ/l1YUfE8oPuahJQxzehAjEt2GiQuy/BIvl9KyeF" crossorigin="anonymous"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body);
+        });
+    </script>
+
+<header>
+
+  
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css">
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+  <nav>
+    <ul>
+      
+      
+      <li class="pull-left ">
+        <a href="https://hjhee.github.io/">/home/hjhee blog</a>
+      </li>
+      
+      
+      <li class="pull-left ">
+        <a href="/tags/">~/tags</a>
+      </li>
+      
+
+      
+      
+      <li class="pull-right">
+        <a href="/index.xml">~/rss</a>
+      </li>
+      
+
+    </ul>
+  </nav>
+</header>
+
+  </head>
+
+  <body>
+    <br/>
+
+<div class="article-meta">
+<h1><span class="title">Introduction to Qt Quick Development</span></h1>
+
+<h2 class="date">2016/06/28</h2>
+<p class="terms">
+  
+  
+  
+  
+  Tags: <a href="/tags/qml">qml</a> 
+  
+  
+</p>
+</div>
+
+
+
+<main>
+<p>简易开发文档</p>
+<h1 id="qt-quick-介绍">Qt Quick 介绍</h1>
+<p><a href="http://doc.qt.io/qt-5/qtquick-index.html">Qt Quick</a></p>
+<p>Qt Quick provides everything needed to create a rich application with a fluid and dynamic user interface. It enables user interfaces to be built around the behavior of user interface components and how they connect with one another, and it provides a visual canvas with its own coordinate system and rendering engine. Animation and transition effects are a first class concept in Qt Quick, and visual effects can be supplemented through specialized components for particle and shader effects.</p>
+<h2 id="qt-开发环境">Qt 开发环境</h2>
+<p><a href="https://lug.ustc.edu.cn/sites/qtguide/ch01-03.htm">Qt在Windows下安装</a></p>
+<p>选择Qt 5.6，MSVC 2015
+库至少包括：</p>
+<ul>
+<li>Qt Quick Controls</li>
+<li>Qt WebEngine</li>
+<li>Qt Labs Controls(TP)</li>
+</ul>
+<h2 id="qt-插件">Qt 插件</h2>
+<p>使用了如下插件：</p>
+<p><a href="http://www.arnorehn.de/blog/2014/12/quickplot-a-collection-of-native-qtquick-plot-items/">QuickPlot</a>: A collection of native QtQuick plotting items
+用于DA输出设置的绘图，用git下载源代码编译安装。</p>
+<p><a href="https://github.com/VSRonin/QtXlsxWriter">QtXlsxWriter</a>: .xlsx file reader and writer for Qt5
+用于从数据库导出Excel表格</p>
+<p><a href="https://blog.qt.io/blog/2016/01/18/qt-charts-2-1-0-release/">Qt Charts</a>: 用于波形图绘制
+<a href="http://blog.csdn.net/onlyshi/article/details/50666858">Qt Charts安装教程</a></p>
+<h1 id="qt-特性">Qt 特性</h1>
+<h2 id="qml-语言">qml 语言</h2>
+<p>QML (Qt Meta-Object Language)，是Qt推出的Qt Quick技术的一部分，是一种新增的简便易学的语言。QML是一种陈述性语言，用来描述一个程序的用户界面。文件格式以.qml结尾。语法格式非常像CSS，但又支持javacript形式的编程控制。在QML，一个用户界面被指定为具有属性的对象树。 这使得Qt更加便于很少或没有编程经验的人使用。 JavaScript在QML中作为一种脚本语言，对QML进行逻辑方面的编程。</p>
+<h2 id="cqml-交互">C++/qml 交互</h2>
+<p>C++与qml交互是重要的一环，Context Properties是一个很好的办法。</p>
+<p><a href="http://doc.qt.io/qt-5/qtqml-cppintegration-topic.html">Integrating QML and C++</a>
+<a href="http://doc.qt.io/qt-5/qtqml-cppintegration-exposecppattributes.html">Exposing Attributes of C++ Classes to QML</a>
+<a href="http://doc.qt.io/qt-5/qtqml-cppintegration-contextproperties.html">Embedding C++ Objects into QML with Context Properties</a>
+<a href="http://doc.qt.io/qt-5/qtqml-cppintegration-data.html">Data Type Conversion Between QML and C++</a></p>
+<h2 id="qthread">QThread</h2>
+<p>关于Qt的多线程使用，应参考如下文章：</p>
+<p><a href="http://doc.qt.io/qt-5/qthread.html">QThread Class</a>
+<a href="http://blog.debao.me/2013/08/how-to-use-qthread-in-the-right-way-part-1/">How to use QThread in the right way (Part 1)</a>
+<a href="https://woboq.com/blog/qthread-you-were-not-doing-so-wrong.html">QThread: You were not doing so wrong.</a>
+<a href="http://stackoverflow.com/questions/4093159/what-is-the-correct-way-to-implement-a-qthread-example-please">what is the correct way to implement a QThread… (example please…)</a>
+<a href="https://mayaposch.wordpress.com/2011/11/01/how-to-really-truly-use-qthreads-the-full-explanation/">How To Really, Truly Use QThreads; The Full Explanation</a></p>
+<h2 id="webengineview">WebEngineView</h2>
+<p>在QML界面中嵌入网页，利用js库可以绘制漂亮的图表，如<a href="http://www.flotcharts.org/">flotcharts</a>。新一代Qt的浏览器引擎是QWebEngine，由此引入了C++/qml/HTML之间通信的问题。</p>
+<p>In Qt5.6, if you want to make C++ part and JavaScript to communicate, the only way to do it is using QWebChannel on a QWebEngineView.</p>
+<p><a href="http://stackoverflow.com/questions/28565254/how-to-use-qt-webengine-and-qwebchannel">How to use Qt WebEngine and QWebChannel?</a>
+<a href="http://blog.csdn.net/liuyez123/article/details/50509788">实现QT与HTML页面通信</a>
+<a href="http://blog.trumpton.org.uk/2015/09/qt-webengineview-communication-with.html">QT WebEngineView Communication with Javascript</a></p>
+<h1 id="移动式气体检测仪">移动式气体检测仪</h1>
+<p>设计思想见论文和PPT，程序主要有如下功能:</p>
+<ul>
+<li>设备控制</li>
+<li>操控界面</li>
+<li>数据记录</li>
+<li>数据上传</li>
+</ul>
+<p>利用USB2089驱动控制设备，函数用法见阿尔泰文档。需要导入驱动库(USB2089_32.lib)到Qt Creator项目，见教程：<a href="http://qa.helplib.com/489803">添加外部库导入Qt Creator项目</a>。</p>
+<p>Device类提供C++接口给QML，内部初始化了DAQ和DAC类，分别用于数据采集和波形生成。采集数据之间通过全局数组qint16 adBuffer[1024]共享数据，定义于main.cpp。</p>
+<p>Device类有若干成员：</p>
+<ul>
+<li>m_gasData: 将电压数据转换为气体浓度，数据暴露给QML</li>
+<li>m_gasTimer： 气体浓度数据更新定时</li>
+<li>m_serial: 串口控制相关</li>
+<li>m_daPara: QML界面设置的DA参数保存于此</li>
+<li>m_dio: 设置电磁阀/气泵的DO，包括温控PID的PWM生成</li>
+<li>m_devTimer: 设备采集时间的计时器</li>
+<li>m_adSource: 将最新的电压数据放入qt charts的series中, m_adSource提供给QML接口</li>
+<li>m_daSource: 与m_adSource同理</li>
+</ul>
+<p>Q_PROPERTY相关见<a href="http://doc.qt.io/qt-5/qtqml-cppintegration-contextproperties.html">Embedding C++ Objects into QML with Context Properties</a>。</p>
+<p>Device的m_status反应了采集状态，0为停止，1为采集。m_status通过Q_PROPERTY暴露给QML。</p>
+<p>DAQ负责数据采集，启用独立线程工作，同时设定了定时器，重写了timerEvent()。关于timerEvent()见<a href="http://stackoverflow.com/questions/12628343/qtimer-vs-timerevent-which-of-them-produces-less-overhead">Qtimer vs timerEvent - which of them produces less overhead?</a>。
+DAQ定时器的工作状态受Device的m_status影响。DAQ采集的数据保存在ADBuffer数组内，同时发出信号acquired(QDateTime)。</p>
+<p>DAC构造函数定义了通道号(m_channel)，共12个DAC开辟了12个线程，DAC与DAQ类似，启用timerEvent()定时产生波形，定时周期为20ms。波形参数由Device的m_daPara指定，包括波形、周期、占空比和幅值。
+DAC内部维护了相位，定义是m_phase，相位指定了波形产生的阶段。</p>
+<p>DAParameter的parameters属性利用了QVariantList，是一个二维js数组，第一维是通道号，第二维是参数值。</p>
+<p>DataSource定义了用于Qt Charts绘图的数据源，其设计参考了Qt Creator的例子<a href="http://doc.qt.io/qt-5/qtcharts-qmloscilloscope-example.html">Qml Oscilloscope</a>，可在屏幕上以60Hz绘制20000点的波形，效率极高。界面显示相关部分也一并参考。</p>
+<p>GasData定义了槽： newData()，接收DAQ的信号acquired()，从ADBuffer数组中获取电压数据转换浓度，发出浓度变量数值改变的信号timeChanged(), so2Changed(), no2Changed(), etc&hellip; ，通知QML更新显示界面。</p>
+<p>Serial负责GPRS通信，波特率115200，开辟线程处理通信事务，通信协议是论文的简化版，有帧头、ID和消息类型和负载。根据消息类型判断负载长度。类型0为心跳包，1为浓度数据上传，2为设备状态返回。当数据到达的时候，信号readyRead()发出，Serial的槽handleReadRead()负责读取数据，newPacket()负责对数据解析。</p>
+<p>Database类负责处理数据库事务。DAQ发出acquired()信号之后，Database的槽insert()动作，将数据插入表内。表的结构见PPT，表名通过m_tableName获取。
+表名模板为tableyyyy_mm_dd_HH_MM_SS_XXX，可通过界面调整表头为上次值或者是新建表tableSwitch()将更改表名名称。
+目前数据库采用PostgreSQL 9.5， Qt采用QPSQL驱动，需要手动添加驱动。教程见<a href="https://www.youtube.com/watch?v=fBgJ9Azm_S0">Qt 5.3 MinGW + PostgreSQL 9. Make SQL driver and database connectiion on Windows 7</a>
+HostName=&quot;localhost&rdquo;, DatabaseName=&quot;sensor&rdquo;, UserName=&quot;postgres&rdquo;, Password=&quot;Hallo&rdquo;, Port=5432.
+数据库支持插入数据、表名查询和导出操作，这些工作分别交给线程DBWorker完成：开辟线程，初始化DBWorker,通过信号槽将任务分配给工作线程。待线程完成工作后发出信号给Database。</p>
+<p>Timer是一个自定义定时器，与QTimer别无二致，但是增加了槽onStatusChanged()，与Device的status连接(connect)可以联动。</p>
+<p>QML部分定义的文件需要加入资源文件中(resource.qrc)，否则编译时会报错。文件目录&quot;qrc:/&ldquo;为项目根目录。QML文件与HTML代码类似，不再描述。</p>
+</main>
+
+    <footer>
+      
+<script>
+(function() {
+  function center_el(tagName) {
+    var tags = document.getElementsByTagName(tagName), i, tag;
+    for (i = 0; i < tags.length; i++) {
+      tag = tags[i];
+      var parent = tag.parentElement;
+      
+      if (parent.childNodes.length === 1) {
+        
+        if (parent.nodeName === 'A') {
+          parent = parent.parentElement;
+          if (parent.childNodes.length != 1) continue;
+        }
+        if (parent.nodeName === 'P') parent.style.textAlign = 'center';
+      }
+    }
+  }
+  var tagNames = ['img', 'embed', 'object'];
+  for (var i = 0; i < tagNames.length; i++) {
+    center_el(tagNames[i]);
+  }
+})();
+</script>
+
+      
+    </footer>
+  </body>
+</html>
+

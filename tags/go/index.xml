@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Go on Hjhee Blog</title>
+    <link>https://hjhee.github.io/tags/go/</link>
+    <description>Recent content in Go on Hjhee Blog</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-cn</language>
+    <lastBuildDate>Wed, 29 Jun 2016 01:25:20 +0000</lastBuildDate>
+    
+	<atom:link href="https://hjhee.github.io/tags/go/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Remote Monitor Platform Development</title>
+      <link>https://hjhee.github.io/posts/remote-platform/</link>
+      <pubDate>Wed, 29 Jun 2016 01:25:20 +0000</pubDate>
+      
+      <guid>https://hjhee.github.io/posts/remote-platform/</guid>
+      <description>&lt;h1 id=&#34;运行环境&#34;&gt;运行环境&lt;/h1&gt;
+&lt;p&gt;程序运行在阿里云云主机上，跑Gentoo Linux系统。服务器架构如论文和PPT描述。
+服务器开放UDP端口5683与设备通信，目前采用自定义协议，以后可以尝试CoAP协议，但目前的GPRS模块通信质量比较差，使用CoAP协议需要考虑。
+80端口开放http服务，用nginx反向代理，url结构如nginx配置文件所示。&lt;/p&gt;</description>
+    </item>
+    
+  </channel>
+</rss>
