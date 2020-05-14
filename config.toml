@@ -1,0 +1,40 @@
+baseurl = "https://hjhee.github.io/"
+languageCode = "zh-cn"
+title = "Hjhee Blog"
+theme = "hugo-classic"
+enableEmoji = true
+googleAnalytics = ""
+disqusShortname = ""
+ignoreFiles = ["\\.Rmd$", "\\.Rmarkdown$", "_files$", "_cache$"]
+footnotereturnlinkcontents = "↩"
+
+[permalinks]
+    post = "/post/:year/:month/:day/:slug/"
+    note = "/note/:year/:month/:day/:slug/"
+
+[[menu.main]]
+    name = "Tags"
+    url = "/tags/"
+    weight = 1
+[[menu.feed]]
+    name = "RSS"
+    url = "/index.xml"
+
+[params]
+    description = "个人博客"
+    intro = """
+"""
+    footer = """
+"""
+
+[markup]
+  [markup.highlight]
+    codeFences = true
+    guessSyntax = false
+    hl_Lines = ""
+    lineNoStart = 1
+    lineNos = false
+    lineNumbersInTable = true
+    noClasses = true
+    style = "monokai"
+    tabWidth = 4
